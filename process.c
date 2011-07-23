@@ -8,7 +8,6 @@
 #include <sys/types.h>
 #include <signal.h>
 
-
 process * process_new(char * command, int restart_on_close){
 	int len = strlen(command);
 	process * proc = (process*)malloc(sizeof(process));

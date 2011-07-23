@@ -1,5 +1,4 @@
 #include "procman.h"
-#include "process.h"
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,10 +7,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <signal.h>
-
-process * proc;
-FILE * out;
-char * towatch;
 
 void print_usage(char * name){
 	printf("Usage: %s [options] command ...\n", name);
@@ -42,7 +37,7 @@ void output_callback(int fd){
 	if(read(fd, buf, 1023) > 0){
 		fprintf(out, "%s", buf);
 	} else {
-		exit(0);
+		UNINIT_AND_EXIT;
 	}
 }
 
@@ -51,21 +46,21 @@ void control_callback(int fd){
 	
 	if(read(fd, &code, sizeof(int)) > 0){
 		if(code == STOP){
-			printf("process stopped ... exiting\n");
-			exit(0);
+			notify_notification_show(stop_note, NULL);
+			UNINIT_AND_EXIT;
 		}
 		if(code == START){
-			printf("process started\n");
+			notify_notification_show(start_note, NULL);
 		} 
 		else if(code == RESTART){
-			printf("process stopped ... restarting\n");
+			notify_notification_show(restart_note, NULL);
 		}
 	}
 }
 
 void handle_signal(int sig){
 	stop_process(proc);
-	exit(0);
+	UNINIT_AND_EXIT;
 }
 
 int main(int argc, char *argv[]){
@@ -75,6 +70,15 @@ int main(int argc, char *argv[]){
 	fd_set master_set, working_set;
 	struct timeval timeout;
 	out = stdout;
+	
+	notify_init("procman");
+	start_note = notify_notification_new("Procman Notification", 
+					"Your process has been started", NULL);
+	stop_note = notify_notification_new("Procman Notification",
+					"Your process has stopped ... procman exiting now", 
+					NULL);
+	restart_note = notify_notification_new("Procman Notification",
+					"Your process has stopped ... restarting", NULL);
 	
 	while((opt = getopt(argc, argv, "no:")) != -1){
 		switch(opt){
@@ -133,6 +137,8 @@ int main(int argc, char *argv[]){
 		
 		stop_process(proc);
 	}
+	
+	notify_uninit();
 	
 	return 0;
 }
