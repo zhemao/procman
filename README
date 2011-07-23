@@ -1,9 +1,11 @@
 Procman - Process Manager
 ===========================
 
-Show those processes who's boss. Procman is a program that runs 
+Show those processes who's boss. Procman is yet another process managing program.
+It has options to restart a program if it exits, restart a program if its file
+is changed, and sends you notifications using libnotify.
 
-Usage: ./procman [options] command ...
+Usage: ./procman [options] command [command args ...]
 
 Options:
 -r No Restart - do not restart when process exits

@@ -10,7 +10,7 @@
 #include <signal.h>
 
 void print_usage(char * name){
-	printf("Usage: %s [options] command ...\n", name);
+	printf("Usage: %s [options] command [command args ...]\n", name);
 	printf("Options:\n");
 	printf("-n Restart - set to 0 or 1 to disable or enable restart on close\n");
 	printf("\tdefaults to 1\n");
