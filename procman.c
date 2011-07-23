@@ -6,12 +6,17 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <signal.h>
 
 void print_usage(char * name){
 	printf("Usage: %s [options] command ...\n", name);
 	printf("Options:\n");
-	printf("-n No Restart - do not restart when process exits\n");
+	printf("-n Restart - set to 0 or 1 to disable or enable restart on close\n");
+	printf("\tdefaults to 1\n");
+	printf("-w Watch - set to 0 or 1 to disable or enable watching of the executable\n");
+	printf("\tdefaults to 1\n");
+	printf("-o Output - output to the given file instead of stdout\n");
 	exit(1);
 }
 
@@ -37,24 +42,16 @@ void output_callback(int fd){
 	if(read(fd, buf, 1023) > 0){
 		fprintf(out, "%s", buf);
 	} else {
-		UNINIT_AND_EXIT;
-	}
-}
-
-void control_callback(int fd){
-	int code;
-	
-	if(read(fd, &code, sizeof(int)) > 0){
-		if(code == STOP){
+		if(proc->restart_on_close){
+			notify_notification_show(restart_note, NULL);
+			start_process(proc);
+			FD_ZERO(&master_set);
+			FD_SET(proc->output, &master_set);
+		} else {
 			notify_notification_show(stop_note, NULL);
 			UNINIT_AND_EXIT;
 		}
-		if(code == START){
-			notify_notification_show(start_note, NULL);
-		} 
-		else if(code == RESTART){
-			notify_notification_show(restart_note, NULL);
-		}
+		
 	}
 }
 
@@ -63,11 +60,31 @@ void handle_signal(int sig){
 	UNINIT_AND_EXIT;
 }
 
+time_t get_last_modified_time(char * filename){
+	struct stat st;
+	if(stat(filename, &st)==0){
+		return st.st_mtime;
+	}
+	return 0;
+}
+
+void check_for_change(char * filename){
+	if(filename == NULL) return;
+	time_t mtime = get_last_modified_time(filename);
+	if(mtime > last_modified){
+		notify_notification_show(modify_note, NULL);
+		stop_process(proc);
+		start_process(proc);
+		FD_ZERO(&master_set);
+		FD_SET(proc->output, &master_set);
+		last_modified = mtime;
+	}
+}
+
 int main(int argc, char *argv[]){
-	int restart_on_close = 1, opt, i, fd_max;
+	int restart_on_close = 1, watch = 1, opt;
 	char * command;
 	int retcode;
-	fd_set master_set, working_set;
 	struct timeval timeout;
 	out = stdout;
 	
@@ -79,10 +96,15 @@ int main(int argc, char *argv[]){
 					NULL);
 	restart_note = notify_notification_new("Procman Notification",
 					"Your process has stopped ... restarting", NULL);
+	modify_note = notify_notification_new("Procman Notification",
+					"Procman has detected a change in your program. Restarting the process.", 
+					NULL);
 	
-	while((opt = getopt(argc, argv, "no:")) != -1){
+	while((opt = getopt(argc, argv, "r:w:o:")) != -1){
 		switch(opt){
-		case 'n': restart_on_close = 0;
+		case 'r': restart_on_close = atoi(optarg);
+			break;
+		case 'w': watch = atoi(optarg);
 			break;
 		case 'o': out = fopen(optarg, "w");
 			break;
@@ -93,14 +115,13 @@ int main(int argc, char *argv[]){
 	if(optind >= argc)
 		print_usage(argv[0]);
 		
-	command = join(argv+optind, argc-optind);
-	proc = process_new(command, restart_on_close);
-	free(command);
+	command = argv[optind];
+	if(watch)
+		last_modified = get_last_modified_time(command);
+	proc = process_new(command, argc-optind, argv+optind, restart_on_close);
 	
 	retcode = start_process(proc);
-	if(proc->output > proc->control)
-		fd_max = proc->output+1;
-	else fd_max = proc->control+1;
+	notify_notification_show(start_note, NULL);
 	
 	timeout.tv_sec  = 10;
 	timeout.tv_usec = 0;
@@ -112,11 +133,11 @@ int main(int argc, char *argv[]){
 	
 		FD_ZERO(&master_set);
 		FD_SET(proc->output, &master_set);
-		FD_SET(proc->control, &master_set);
 		
 		while(1){
 			memcpy(&working_set, &master_set, sizeof(master_set));
-			retcode = select(fd_max, &working_set, NULL, NULL, &timeout);
+			retcode = select(proc->output+1, &working_set, 
+					NULL, NULL, &timeout);
 			
 			if(retcode < 0){
 				printf("select() failed ... exiting \n");
@@ -128,11 +149,10 @@ int main(int argc, char *argv[]){
 				if(FD_ISSET(proc->output, &working_set)){
 					output_callback(proc->output);
 				}
-				
-				if(FD_ISSET(proc->control, &working_set)){
-					control_callback(proc->control);
-				}
 			}
+			
+			if(watch)
+				check_for_change(proc->command);
 		}
 		
 		stop_process(proc);

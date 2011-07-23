@@ -4,6 +4,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import sys
 
 # simple python3 server to demo website
+# some comments
 
 if __name__=='__main__':
     port = len(sys.argv)>1 and int(sys.argv[1]) or 8000

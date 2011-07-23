@@ -11,13 +11,14 @@ int code;
 
 typedef struct {
 	char * command;
+	char ** args;
+	int numargs;
 	int pid;
 	int restart_on_close;
 	int output;
-	int control;
 } process;
 
-process * process_new(char * command, int restart_on_close);
+process * process_new(char * command, int argc, char ** argv,  int restart_on_close);
 int start_process(process * proc);
 void stop_process(process * proc);
 void process_free(process * proc);

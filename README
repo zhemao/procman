@@ -1,4 +1,11 @@
 Procman - Process Manager
 ===========================
 
-Show those processes who's boss.
+Show those processes who's boss. Procman is a program that runs 
+
+Usage: ./procman [options] command ...
+
+Options:
+-r No Restart - do not restart when process exits
+-w No Watching - do not watch for modifications
+-o Output - output to the given file instead of stdout

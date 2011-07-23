@@ -1,6 +1,5 @@
 #include "process.h"
 #include <unistd.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,31 +7,43 @@
 #include <sys/types.h>
 #include <signal.h>
 
-process * process_new(char * command, int restart_on_close){
+process * process_new(char * command, int argc, char **argv, 
+		int restart_on_close){
 	int len = strlen(command);
+	int i;
+	
 	process * proc = (process*)malloc(sizeof(process));
 	proc->command = (char*)malloc(sizeof(char)*(len+1));
 	strcpy(proc->command, command);
+	
+	proc->numargs = argc;
+	proc->args = (char**)malloc(sizeof(char*) * (argc+1));
+	
+	for(i=0; i<argc; i++){
+		len = strlen(argv[i]);
+		proc->args[i] = malloc(sizeof(char*) * (len+1));
+		strcpy(proc->args[i], argv[i]);
+	}
+	
+	proc->args[argc] = NULL;
 	proc->restart_on_close = restart_on_close;
 	return proc;
 }
 
 int start_process(process * proc){
 	int output_pipe[2];
-	int control_pipe[2];
 	
 	/* set up our pipes */
 	pipe(output_pipe);
-	pipe(control_pipe);
 	
 	proc->output = output_pipe[0];
-	proc->control = control_pipe[0];
 	
 	/* fork, fork, fork ! */
 	proc->pid = fork();
 	
 	/* if there was an error, return -1 */
 	if(proc->pid == -1){
+		printf("fork failed for some reason\n");
 		return -1;
 	}
 	if(proc->pid == 0){
@@ -42,7 +53,6 @@ int start_process(process * proc){
 		
 		/* close the input pipes */
 		close(output_pipe[0]);
-		close(control_pipe[0]);
 		
 		/* redirect stdin to /dev/null */
 		dup2(devnull, 0);
@@ -51,40 +61,30 @@ int start_process(process * proc){
 		dup2(output_pipe[1], 1);
 		dup2(output_pipe[1], 2);
 		
-		if(proc->restart_on_close){
-			while(1){
-				WRITE_CODE(control_pipe[1], START);
-				retcode = system(proc->command);
-				WRITE_CODE(control_pipe[1], RESTART);
-			}
-			
-			/* Ahh, what the hell happened? We shouldn't be here! */
-			exit(-1);
-		}
-		
-		WRITE_CODE(control_pipe[1], START);
-		retcode = system(proc->command);
-		WRITE_CODE(control_pipe[1], STOP);
+		retcode = execvp(proc->command, proc->args);
 		exit(retcode);
 	}
 	
 	/* close the output ends */
 	close(output_pipe[1]);
-	close(control_pipe[1]);
 	
 	fcntl(proc->output, F_SETFL, O_NONBLOCK);
-	fcntl(proc->control, F_SETFL, O_NONBLOCK);
 	
 	return 0;
 }
 
 void stop_process(process * proc){
+	close(proc->output);
 	kill(proc->pid, SIGINT);
 	kill(proc->pid, SIGTERM);
 	kill(proc->pid, SIGKILL);
 }
 
 void process_free(process * proc){
+	int i;
+	for(i=0; i<proc->numargs; i++)
+		free(proc->args[i]);
+	free(proc->args);
 	free(proc->command);
 	free(proc);
 }
