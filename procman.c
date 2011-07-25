@@ -2,9 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <sys/select.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
@@ -34,6 +32,36 @@ char * join(char ** args, int len){
 	return buf;
 }
 
+#ifdef LIBNOTIFY
+void notify(notify_action action){
+	NotifyNotification * note;
+	switch(action){
+	case START: note = start_note;
+		break;
+	case RESTART: note = restart_note;
+		break;
+	case STOP: note = stop_note;
+		break;
+	case MODIFY: note = modify_note;
+	}
+	notify_notification_show(note, NULL);
+}
+#else
+void notify(notify_action action){
+	char * message;
+	switch(action){
+	case START: message = start_message;
+		break;
+	case RESTART: message = restart_message;
+		break;
+	case STOP: message = stop_message;
+		break;
+	case MODIFY: message = modify_message;
+	}
+	printf("%s\n", message);
+}
+#endif
+
 void output_callback(int fd){
 	char buf[1024];
 	
@@ -43,12 +71,12 @@ void output_callback(int fd){
 		fprintf(out, "%s", buf);
 	} else {
 		if(proc->restart_on_close){
-			notify_notification_show(restart_note, NULL);
+			notify(RESTART);
 			start_process(proc);
 			FD_ZERO(&master_set);
 			FD_SET(proc->output, &master_set);
 		} else {
-			notify_notification_show(stop_note, NULL);
+			notify(STOP);
 			UNINIT_AND_EXIT;
 		}
 		
@@ -72,7 +100,7 @@ void check_for_change(char * filename){
 	if(filename == NULL) return;
 	time_t mtime = get_last_modified_time(filename);
 	if(mtime > last_modified){
-		notify_notification_show(modify_note, NULL);
+		notify(MODIFY);
 		stop_process(proc);
 		start_process(proc);
 		FD_ZERO(&master_set);
@@ -88,6 +116,7 @@ int main(int argc, char *argv[]){
 	struct timeval timeout;
 	out = stdout;
 	
+	#ifdef LIBNOTIFY
 	notify_init("procman");
 	start_note = notify_notification_new("Procman Notification", 
 					"Your process has been started", NULL);
@@ -99,6 +128,12 @@ int main(int argc, char *argv[]){
 	modify_note = notify_notification_new("Procman Notification",
 					"Procman has detected a change in your program. Restarting the process.", 
 					NULL);
+	#else
+	start_message = "Your process has been started";
+	stop_message = "Your process has stopped ... procman exiting now";
+	restart_message = "Your process has stopped ... restarting";
+	modify_message = "Procman has detected a change in your program. Restarting the process.";
+	#endif
 	
 	while((opt = getopt(argc, argv, "r:w:o:")) != -1){
 		switch(opt){
@@ -121,7 +156,7 @@ int main(int argc, char *argv[]){
 	proc = process_new(command, argc-optind, argv+optind, restart_on_close);
 	
 	retcode = start_process(proc);
-	notify_notification_show(start_note, NULL);
+	notify(START);
 	
 	timeout.tv_sec  = 10;
 	timeout.tv_usec = 0;
