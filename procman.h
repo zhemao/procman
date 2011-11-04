@@ -16,6 +16,12 @@
 	#define UNINIT_AND_EXIT exit(0)
 #endif
 
+typedef enum {
+	START,
+	RESTART,
+	MODIFY,
+	STOP
+} notify_action;
 	
 process * proc;
 FILE * out;
