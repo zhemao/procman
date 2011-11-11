@@ -131,7 +131,7 @@ void check_for_change(char * filename){
 }
 
 int main(int argc, char *argv[]){
-	int restart_on_close = 1, watch = 1, opt;
+	int restart_on_close = 1, watch = 1, nohup = 0, opt;
 	char * command;
 	int retcode;
 	struct timeval timeout;
@@ -159,13 +159,15 @@ int main(int argc, char *argv[]){
 	modify_message = "Procman has detected a change in your program. Restarting the process.";
 	#endif
 	
-	while((opt = getopt(argc, argv, "r:w:o:")) != -1){
+	while((opt = getopt(argc, argv, "r:w:o:n")) != -1){
 		switch(opt){
 		case 'r': restart_on_close = atoi(optarg);
 			break;
 		case 'w': watch = atoi(optarg);
 			break;
 		case 'o': out = fopen(optarg, "w");
+			break;
+		case 'n': nohup = 1;
 			break;
 		default: print_usage(argv[0]);
 		}
@@ -195,6 +197,9 @@ int main(int argc, char *argv[]){
 	
 		signal(SIGINT, handle_signal);
 		signal(SIGTERM, handle_signal);
+		if(nohup)
+			signal(SIGHUP, SIG_IGN);
+		else signal(SIGHUP, handle_signal);
 
 		fdmax = proc->output;
 	
