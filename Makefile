@@ -1,12 +1,12 @@
 CFLAGS=`pkg-config libnotify --cflags`
 LDFLAGS=`pkg-config libnotify --libs`
-OPTIONS=-O2 -DLIBNOTIFY
+OPTS=-O2 -DLIBNOTIFY -DINOTIFY
 
 procman: procman.h procman.c process.o
-	gcc $(OPTIONS) procman.c process.o $(CFLAGS) $(LDFLAGS) -o procman
+	gcc $(OPTS) procman.c process.o $(CFLAGS) $(LDFLAGS) -o procman
 
 process.o: process.h process.c
-	gcc $(OPTIONS) -c process.c
+	gcc $(OPTS) -c process.c
 
 clean:
 	rm -f procman *.o 

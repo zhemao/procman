@@ -6,6 +6,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#ifdef INOTIFY
+	#include <sys/inotify.h>
+#endif
+
+static int fdmax;
 
 void print_usage(char * name){
 	printf("Usage: %s [options] command [command args ...]\n", name);
@@ -96,6 +101,21 @@ time_t get_last_modified_time(char * filename){
 	return 0;
 }
 
+#ifdef INOTIFY
+void inot_callback(int fd, char * filename){
+	struct inotify_event event;
+	if(read(fd, &event, sizeof(event)) > 0){
+		notify(MODIFY);
+		stop_process(proc);
+		start_process(proc);
+		FD_ZERO(&master_set);
+		FD_SET(proc->output, &master_set);
+		FD_SET(fd, &master_set);
+		fdmax = (fd > proc->output) ? fd : proc->output;
+	}
+}
+#endif
+
 void check_for_change(char * filename){
 	if(filename == NULL) return;
 	time_t mtime = get_last_modified_time(filename);
@@ -105,6 +125,7 @@ void check_for_change(char * filename){
 		start_process(proc);
 		FD_ZERO(&master_set);
 		FD_SET(proc->output, &master_set);
+		fdmax = proc->output;
 		last_modified = mtime;
 	}
 }
@@ -115,6 +136,9 @@ int main(int argc, char *argv[]){
 	int retcode;
 	struct timeval timeout;
 	out = stdout;
+#ifdef INOTIFY
+	int inotfd;
+#endif
 	
 	#ifdef LIBNOTIFY
 	notify_init("procman");
@@ -151,27 +175,41 @@ int main(int argc, char *argv[]){
 		print_usage(argv[0]);
 		
 	command = argv[optind];
-	if(watch)
+	if(watch){
+	#ifdef INOTIFY
+		inotfd = inotify_init1(IN_NONBLOCK);
+		inotify_add_watch(inotfd, command, IN_ATTRIB|IN_MODIFY|IN_CLOSE_WRITE);
+	#else
 		last_modified = get_last_modified_time(command);
+	#endif
+	}
 	proc = process_new(command, argc-optind, argv+optind, restart_on_close);
 	
 	retcode = start_process(proc);
 	notify(START);
 	
-	timeout.tv_sec  = 10;
+	timeout.tv_sec  = 2;
 	timeout.tv_usec = 0;
 	
 	if(retcode != -1){
 	
 		signal(SIGINT, handle_signal);
 		signal(SIGTERM, handle_signal);
+
+		fdmax = proc->output;
 	
 		FD_ZERO(&master_set);
 		FD_SET(proc->output, &master_set);
-		
+		#ifdef INOTIFY
+		if(watch){
+			FD_SET(inotfd, &master_set);
+			fdmax = (inotfd > proc->output) ? inotfd : proc->output;
+		} 
+		#endif
+
 		while(1){
 			memcpy(&working_set, &master_set, sizeof(master_set));
-			retcode = select(proc->output+1, &working_set, 
+			retcode = select(fdmax+1, &working_set, 
 					NULL, NULL, &timeout);
 			
 			if(retcode < 0){
@@ -184,12 +222,18 @@ int main(int argc, char *argv[]){
 				if(FD_ISSET(proc->output, &working_set)){
 					output_callback(proc->output);
 				}
+
+				#ifdef INOTIFY
+				if(watch && FD_ISSET(inotfd, &working_set)){
+					inot_callback(inotfd, proc->command);	
+				}
+				#endif
 			}
-			
-			if(watch)
-				check_for_change(proc->command);
+			#ifndef INOTIFY
+			if(watch) check_for_change(proc->command);
+			#endif
 		}
-		
+				
 		stop_process(proc);
 	}
 	
