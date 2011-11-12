@@ -11,6 +11,9 @@
 #endif
 
 static int fdmax;
+#ifdef INOTIFY
+static int inotfd;
+#endif
 
 void print_usage(char * name){
 	printf("Usage: %s [options] command [command args ...]\n", name);
@@ -89,6 +92,7 @@ void output_callback(int fd){
 }
 
 void handle_signal(int sig){
+	close(inotfd);
 	stop_process(proc);
 	UNINIT_AND_EXIT;
 }
@@ -136,9 +140,6 @@ int main(int argc, char *argv[]){
 	int retcode;
 	struct timeval timeout;
 	out = stdout;
-#ifdef INOTIFY
-	int inotfd;
-#endif
 	
 	#ifdef LIBNOTIFY
 	notify_init("procman");
@@ -240,6 +241,7 @@ int main(int argc, char *argv[]){
 		}
 				
 		stop_process(proc);
+		close(inotfd);
 	}
 	
 	notify_uninit();
