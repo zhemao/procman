@@ -106,7 +106,15 @@ time_t get_last_modified_time(char * filename){
 void inot_callback(int fd){
 	int i = 0;
 	char buffer[EVENT_BUF_LEN];
-	int length = read(fd, buffer, EVENT_BUF_LEN);
+	time_t mtime = time(0);
+	int length;
+
+	if(mtime - last_modified < TIMEOUT) return;
+
+	last_modified = mtime;
+	
+	length = read(fd, buffer, EVENT_BUF_LEN);
+
 	while( i < length ){
 		struct inotify_event *event = (struct inotify_event *) &buffer[i];
 		if( event->name[0] != '.' ){
@@ -183,12 +191,14 @@ int main(int argc, char *argv[]){
 		print_usage(argv[0]);
 		
 	command = argv[optind];
+	
 	if(watch){
 	#ifdef INOTIFY
 		inotfd = inotify_init1(IN_NONBLOCK);
 		cwd = getcwd(NULL, 0);
 		inotify_add_watch(inotfd, cwd, IN_MY_FLAGS);
 		free(cwd);
+		last_modified = time(0);
 	#else
 		last_modified = get_last_modified_time(command);
 	#endif

@@ -21,6 +21,7 @@
 	#define EVENT_SIZE (sizeof(struct inotify_event))
 	#define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
 	#define IN_MY_FLAGS IN_MODIFY|IN_CREATE|IN_DELETE|IN_MOVE
+	#define TIMEOUT 2
 #endif
 
 typedef enum {
