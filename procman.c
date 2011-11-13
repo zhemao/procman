@@ -94,14 +94,6 @@ void handle_signal(int sig){
 	UNINIT_AND_EXIT;
 }
 
-time_t get_last_modified_time(char * filename){
-	struct stat st;
-	if(stat(filename, &st)==0){
-		return st.st_mtime;
-	}
-	return 0;
-}
-
 #ifdef INOTIFY
 void inot_callback(int fd){
 	int i = 0;
@@ -132,25 +124,10 @@ void inot_callback(int fd){
 }
 #endif
 
-void check_for_change(char * filename){
-	if(filename == NULL) return;
-	time_t mtime = get_last_modified_time(filename);
-	if(mtime > last_modified){
-		notify(MODIFY);
-		stop_process(proc);
-		start_process(proc);
-		FD_ZERO(&master_set);
-		FD_SET(proc->output, &master_set);
-		fdmax = proc->output;
-		last_modified = mtime;
-	}
-}
-
 int main(int argc, char *argv[]){
 	int restart_on_close = 1, watch = 1, nohup = 0, opt;
 	char * command;
 	int retcode;
-	struct timeval timeout;
 	out = stdout;
 	char * cwd;
 	
@@ -199,17 +176,12 @@ int main(int argc, char *argv[]){
 		inotify_add_watch(inotfd, cwd, IN_MY_FLAGS);
 		free(cwd);
 		last_modified = time(0);
-	#else
-		last_modified = get_last_modified_time(command);
 	#endif
 	}
 	proc = process_new(command, argc-optind, argv+optind, restart_on_close);
 	
 	retcode = start_process(proc);
 	notify(START);
-	
-	timeout.tv_sec  = 2;
-	timeout.tv_usec = 0;
 	
 	if(retcode != -1){
 	
@@ -233,7 +205,7 @@ int main(int argc, char *argv[]){
 		while(1){
 			memcpy(&working_set, &master_set, sizeof(master_set));
 			retcode = select(fdmax+1, &working_set, 
-					NULL, NULL, &timeout);
+					NULL, NULL, NULL);
 			
 			if(retcode < 0){
 				printf("select() failed ... exiting \n");
@@ -252,9 +224,6 @@ int main(int argc, char *argv[]){
 				}
 				#endif
 			}
-			#ifndef INOTIFY
-			if(watch) check_for_change(proc->command);
-			#endif
 		}
 				
 		stop_process(proc);
