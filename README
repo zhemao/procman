@@ -1,13 +1,22 @@
 Procman - Process Manager
 ===========================
 
-Show those processes who's boss. Procman is yet another process managing program.
-It has options to restart a program if it exits, restart a program if its file
-is changed, and sends you notifications using libnotify.
+Show those processes who's boss. Procman is yet another process managing 
+program optimized for Linux.
+
+It has options to restart a program if it exits, restart a program if any file
+in the current directory is modified, and sends you notifications using 
+libnotify.
 
 Usage: ./procman [options] command [command args ...]
 
 Options:
--r No Restart - do not restart when process exits
--w No Watching - do not watch for modifications
+-r Restart 
+	If the option argument is 1, the process will be restarted after 
+	it exits. If the option argument is 0, the process will not be restarted. 
+	Defaults to 1
+-w Watch 
+	If the option argument is 1, procman will watch for changes in the current
+	directory using inotify and restart the process if any changes occur. If
+	the argument is 0, the current directory is not monitored. Defaults to 1.
 -o Output - output to the given file instead of stdout
