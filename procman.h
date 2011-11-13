@@ -16,6 +16,13 @@
 	#define UNINIT_AND_EXIT exit(0)
 #endif
 
+#ifdef INOTIFY
+	#include <sys/inotify.h>
+	#define EVENT_SIZE (sizeof(struct inotify_event))
+	#define EVENT_BUF_LEN (1024 * (EVENT_SIZE + 16))
+	#define IN_MY_FLAGS IN_MODIFY|IN_CREATE|IN_DELETE|IN_MOVE
+#endif
+
 typedef enum {
 	START,
 	RESTART,

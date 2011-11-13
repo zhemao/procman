@@ -6,9 +6,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
-#ifdef INOTIFY
-	#include <sys/inotify.h>
-#endif
 
 static int fdmax;
 #ifdef INOTIFY
@@ -106,16 +103,23 @@ time_t get_last_modified_time(char * filename){
 }
 
 #ifdef INOTIFY
-void inot_callback(int fd, char * filename){
-	struct inotify_event event;
-	if(read(fd, &event, sizeof(event)) > 0){
-		notify(MODIFY);
-		stop_process(proc);
-		start_process(proc);
-		FD_ZERO(&master_set);
-		FD_SET(proc->output, &master_set);
-		FD_SET(fd, &master_set);
-		fdmax = (fd > proc->output) ? fd : proc->output;
+void inot_callback(int fd){
+	int i = 0;
+	char buffer[EVENT_BUF_LEN];
+	int length = read(fd, buffer, EVENT_BUF_LEN);
+	while( i < length ){
+		struct inotify_event *event = (struct inotify_event *) &buffer[i];
+		if( event->name[0] != '.' ){
+			notify(MODIFY);
+			stop_process(proc);
+			start_process(proc);
+			FD_ZERO(&master_set);
+			FD_SET(proc->output, &master_set);
+			FD_SET(fd, &master_set);
+			fdmax = (fd > proc->output) ? fd : proc->output;
+			return;
+		}
+		i += EVENT_SIZE + event->len;
 	}
 }
 #endif
@@ -140,6 +144,7 @@ int main(int argc, char *argv[]){
 	int retcode;
 	struct timeval timeout;
 	out = stdout;
+	char * cwd;
 	
 	#ifdef LIBNOTIFY
 	notify_init("procman");
@@ -181,7 +186,9 @@ int main(int argc, char *argv[]){
 	if(watch){
 	#ifdef INOTIFY
 		inotfd = inotify_init1(IN_NONBLOCK);
-		inotify_add_watch(inotfd, command, IN_ATTRIB|IN_MODIFY|IN_CLOSE_WRITE);
+		cwd = getcwd(NULL, 0);
+		inotify_add_watch(inotfd, cwd, IN_MY_FLAGS);
+		free(cwd);
 	#else
 		last_modified = get_last_modified_time(command);
 	#endif
@@ -231,7 +238,7 @@ int main(int argc, char *argv[]){
 
 				#ifdef INOTIFY
 				if(watch && FD_ISSET(inotfd, &working_set)){
-					inot_callback(inotfd, proc->command);	
+					inot_callback(inotfd);	
 				}
 				#endif
 			}
