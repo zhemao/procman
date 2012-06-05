@@ -182,7 +182,9 @@ int main(int argc, char *argv[]){
 		close(inotfd);
 	}
 	
+	#ifdef LIBNOTIFY
 	notify_uninit();
+	#endif
 	
 	return 0;
 }
